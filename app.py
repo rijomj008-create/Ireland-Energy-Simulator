@@ -295,14 +295,16 @@ demand_change = st.sidebar.slider("Demand Growth (%)", -10, 20, 0)
 smooth_change = st.sidebar.slider("Renewable Stability (−RSD %)", 0, 40, 0)
 
 # -------- APPLY SIMULATION --------
+# ensure sim columns exist
 sim = df.copy()
-sim["ren_share_sim"] = sim["renewable_share_pct"] * (1 + wind_change/100)
-sim["load_sim"] = sim["load_mw"] * (1 + demand_change/100)
+sim["ren_share_sim"]  = sim["renewable_share_pct"]           # or your adjusted value
+sim["load_sim"]       = sim["load_mw"]                        # or adjusted by slider
+sim["total_gen_sim"]  = sim["total_generation_mw"]            # or adjusted by scenario
 sim["price_sim"] = predict_price(
     model, sim, load_mean, load_std,
-    ren_col="ren_share_sim",   # <- your simulated renewable share column
-    load_col="load_sim",       # <- your simulated load column
-    gen_col="total_gen_sim"    # <- your simulated generation column
+    ren_col="ren_share_sim",
+    load_col="load_sim",
+    gen_col="total_gen_sim"
 )
 
 
