@@ -200,26 +200,93 @@ st.header("🧠 5. Decision Intelligence Simulator")
 st.caption("Interactively simulate how changes in wind, demand, or renewable smoothness affect system KPIs.")
 
 # -------- MODEL --------
-def build_features(dfx):
-    X = pd.DataFrame(index=dfx.index)
-    X["ren_share"] = dfx["renewable_share_pct"]
-    X["stress"] = ((dfx["total_generation_mw"] / dfx["load_mw"]) < 1).astype(int)
-    X["load_scaled"] = (dfx["load_mw"] - dfx["load_mw"].mean()) / dfx["load_mw"].std()
-    return X
+# ---- SAFETY HELPERS ----
+def _to_num(s):
+    # coerce any string/object columns to numeric
+    return pd.to_numeric(s, errors="coerce")
 
-def fit_model(dfb):
-    X = build_features(dfb)
-    y = dfb["price_eur_per_mwh"]
-    model = make_pipeline(StandardScaler(), Ridge(alpha=5.0))
-    model.fit(X, y)
-    return model
+def build_features_safe(dfx, load_col="load_mw", gen_col="total_generation_mw",
+                        ren_col="renewable_share_pct"):
+    """Return a clean, finite feature matrix X and a boolean mask of valid rows."""
+    d = dfx.copy()
 
-def predict_price(model, dfnew):
-    X = build_features(dfnew)
-    return model.predict(X)
+    # Ensure required columns exist (create zeros if missing)
+    for c in [load_col, gen_col, ren_col, "wind_speed_mps", "sunshine_fraction"]:
+        if c not in d.columns:
+            d[c] = 0
 
-model = fit_model(df)
-df["price_pred"] = predict_price(model, df)
+    # Coerce to numeric
+    for c in [load_col, gen_col, ren_col, "wind_speed_mps", "sunshine_fraction"]:
+        d[c] = _to_num(d[c])
+
+    # Safe ratio (avoid divide-by-zero)
+    ratio = np.divide(_to_num(d[gen_col]), _to_num(d[load_col]),
+                      out=np.full_like(_to_num(d[gen_col]), np.nan, dtype=float),
+                      where=_to_num(d[load_col]).to_numpy() != 0)
+
+    # Features
+    X = pd.DataFrame(index=d.index)
+    X["ren_share"] = _to_num(d[ren_col])
+    X["stress"] = (ratio < 1).astype(float)   # 0/1 as float
+    # standardize load with safe std
+    load_mean = _to_num(d[load_col]).mean(skipna=True)
+    load_std  = _to_num(d[load_col]).std(skipna=True)
+    if not np.isfinite(load_std) or load_std == 0:
+        load_std = 1.0
+    X["load_scaled"] = (_to_num(d[load_col]) - load_mean) / load_std
+
+    # Optional weather
+    X["wind_speed_mps"] = _to_num(d["wind_speed_mps"]).fillna(d["wind_speed_mps"].median() if "wind_speed_mps" in d else 0)
+    X["sunshine_fraction"] = _to_num(d["sunshine_fraction"]).fillna(0)
+
+    # Replace inf → NaN, then fill with column means
+    X = X.replace([np.inf, -np.inf], np.nan)
+    X = X.astype(float)
+    X = X.fillna(X.mean(numeric_only=True))
+
+    # Valid rows mask (all finite)
+    valid = np.isfinite(X.to_numpy()).all(axis=1)
+    return X, valid, load_mean, load_std
+
+
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Ridge
+
+def fit_model(dfb, price_col="price_eur_per_mwh",
+              load_col="load_mw", gen_col="total_generation_mw", ren_col="renewable_share_pct",
+              alpha=5.0):
+    # y
+    y = _to_num(dfb[price_col]).astype(float)
+    # X (safe)
+    X, valid, load_mean, load_std = build_features_safe(dfb, load_col, gen_col, ren_col)
+
+    # mask to rows with finite X and finite y
+    valid = valid & np.isfinite(y.to_numpy())
+    X_fit = X.loc[valid]
+    y_fit = y.loc[valid]
+
+    # If too few rows, raise helpful error
+    if len(X_fit) < 5:
+        raise ValueError("Not enough clean rows to fit the model after removing NaN/Inf. "
+                         "Check your input CSV columns.")
+
+    model = make_pipeline(StandardScaler(with_mean=True, with_std=True),
+                          Ridge(alpha=alpha, fit_intercept=True))
+    model.fit(X_fit, y_fit)
+    return model, load_mean, load_std
+
+
+def predict_price(model, dfx, load_mean, load_std,
+                  load_col="load_mw", gen_col="total_generation_mw", ren_col="renewable_share_pct"):
+    # Rebuild features using the same logic and previously computed load_mean/std
+    # but keep the same function to guarantee consistency
+    X, valid, _, _ = build_features_safe(dfx, load_col, gen_col, ren_col)
+    # prediction only on rows we have features for
+    yhat = pd.Series(np.nan, index=dfx.index, dtype=float)
+    yhat.loc[X.index] = model.predict(X)
+    return yhat.to_numpy()
+
 
 # -------- SIMULATION SLIDERS --------
 st.sidebar.header("Adjust Parameters")
