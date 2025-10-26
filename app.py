@@ -545,134 +545,120 @@ with tab3:
         st.info("Wind speed not available to compute efficiency.")
 
 # -----------------------------
-# Storytelling — Insights • Gap • Call to Action
+# 📖 Storytelling Presentation Page
 # -----------------------------
 st.markdown("---")
-st.header("🧠 Storytelling")
+st.header("📘 Project Story: From Data to Decisions")
 
-# Helper: safe number formatting
-def fmt(x, unit="", nd=1):
-    if pd.isna(x):
-        return "—"
-    return f"{x:.{nd}f}{unit}"
+# --- PROBLEM ---
+st.subheader("1️⃣ Problem")
+st.markdown("""
+Ireland’s energy system faces the **trilemma** of balancing:
+- **Affordability** — keeping market prices manageable for consumers.
+- **Reliability** — ensuring supply meets demand even during peak or low-wind hours.
+- **Sustainability** — maintaining a healthy share of renewable generation (wind, solar, hydro).
 
-# Pull baseline vs custom KPIs
-kb = kpi.loc["Baseline"]
-kc = kpi.loc["Your custom"]
+When renewable output drops or fluctuates sharply, **stress hours** rise and **electricity prices spike**.
+This volatility affects both consumers and operators, making **data-driven decision models** essential.
+""")
 
-# Compute deltas (Custom vs Baseline)
-delta_price   = kc["avg_price"] - kb["avg_price"]
-delta_p95     = kc["p95_price"] - kb["p95_price"]
-delta_stress  = kc["stress_pct"] - kb["stress_pct"]
-delta_rsd     = kc["rsd"] - kb["rsd"]
-delta_renmean = kc["ren_mean"] - kb["ren_mean"]
+# --- GOAL ---
+st.subheader("2️⃣ Goal")
+st.markdown("""
+To build a **Decision Intelligence Simulator** that connects weather, generation, demand, and price data —
+allowing policymakers and analysts to test **what-if scenarios**:
+> “What happens if wind availability rises by 20%?”  
+> “What if storage smooths renewable fluctuations by 25%?”  
+> “What if demand increases by 10% without extra generation?”
 
-# Quick text helpers
-def updown(v):
-    return "⬆️" if v > 0 else ("⬇️" if v < 0 else "⏸️")
+The goal: quantify how these operational changes affect **price, stress hours, and renewable stability**.
+""")
 
-def qualify(v, better_when="down"):
-    if pd.isna(v): return ""
-    if better_when == "down":
-        return "better" if v < 0 else ("worse" if v > 0 else "no change")
-    else:
-        return "better" if v > 0 else ("worse" if v < 0 else "no change")
+# --- METHODOLOGY (LAYMAN) ---
+st.subheader("3️⃣ Methodology — In Simple Terms")
+st.markdown("""
+1. **Collect Data:** Hourly data from ENTSO-E (load, generation, market price) and Meteostat (weather).
+2. **Clean & Combine:** Build a unified “mart” with load, generation, price, wind speed, sunshine, and temperature.
+3. **Explore:** Identify trends and pain points — when stress hours increase, when renewables are low, and how price reacts.
+4. **Model:** Train a lightweight predictive model that links price with renewable share, grid stress, and demand.
+5. **Simulate:** Adjust wind, demand, and renewable smoothness to see how the system reacts.
+6. **Visualize:** Convert results into interactive dashboards for decision-makers.
+""")
 
-# Build narrative strings
-problem_txt = (
-    "Ireland’s grid must balance **affordability (price)**, **reliability (stress hours)**, "
-    "and **sustainability (renewable share & stability)**. In short, when renewable output is volatile "
-    "or demand is high, **prices spike** and **stress hours increase**."
-)
+# --- METHODOLOGY (ADVANCED) ---
+with st.expander("🔬 Methodology — Technical Details (for Data Analysts)", expanded=False):
+    st.markdown("""
+**Data Sources**
+- ENTSO-E Transparency Platform — Load, Generation by Type, Market Price.
+- Meteostat API — Hourly weather (wind speed, sunshine, precipitation, temperature).
 
-insights_txt = f"""
-**What we learned from the data (Oct 18–25, 2025):**
-- Average price: **€{fmt(kb['avg_price'])}/MWh** (P95: **€{fmt(kb['p95_price'])}/MWh**)
-- Stress hours: **{fmt(kb['stress_pct'],'%')}** of the time (generation < load)
-- Renewable share (avg): **{fmt(kb['ren_mean'],'%')}**, stability (RSD): **{fmt(kb['rsd'])}**
-- Price is most elevated during evening peaks and when renewables are low/volatile.
-"""
+**Processing Steps**
+- Built hourly fact tables: `fact_load_actual`, `fact_generation_actual`, `fact_market_price`.
+- Joined into `mart_ie_hourly_system_kpis` with renewable share, total generation, and weather features.
+- Cleaned NaNs, harmonized timestamps, applied UTC rounding.
 
-gap_txt = (
-    "The **gap** is the **exposure to volatility**: a high portion of hours are stressed and the renewable share varies a lot. "
-    "This keeps the system **price-sensitive** to demand spikes and weather swings."
-)
+**Exploratory Analysis**
+- Evaluated renewable volatility (RSD), stress hours, and price sensitivity.
+- Found high correlation between price spikes and low renewable share.
 
-cta_list = [
-    "Increase **wind availability** (e.g., +20%) to push down average price and reduce stress hours.",
-    "Add **storage / demand flexibility** to **smooth renewable variability** (–25% RSD) for steadier operation.",
-    "Plan for **demand growth** (+10%) with corresponding firm capacity or flex to avoid stress inflation.",
-    "Operate a **hybrid strategy**: targeted wind increases **plus** smoothing mechanisms for the best cost–reliability trade-off.",
-]
+**Modeling**
+- Used **Ridge Regression**:  
+  `price_eur_per_mwh ~ const + renewable_share_pct + stress + load_scaled (+ wind, sunshine)`  
+- Standardized features using `StandardScaler()` and pipelined via `make_pipeline()` for reproducibility.
 
-# Scenario comparison sentence
-scenario_txt = f"""
-**Your custom scenario vs Baseline:**
-- Avg price: {updown(delta_price)} **{fmt(abs(delta_price))} €/MWh** ({qualify(delta_price, 'down')})
-- P95 price: {updown(delta_p95)} **{fmt(abs(delta_p95))} €/MWh** ({qualify(delta_p95, 'down')})
-- Stress hours: {updown(delta_stress)} **{fmt(abs(delta_stress),'%')}** ({qualify(delta_stress, 'down')})
-- Renewable stability (RSD): {updown(delta_rsd)} **{fmt(abs(delta_rsd))}** ({qualify(delta_rsd, 'down')})
-- Avg renewable share: {updown(delta_renmean)} **{fmt(abs(delta_renmean),'%')}** ({qualify(delta_renmean, 'up')})
-"""
+**Simulation Layer**
+- Generated alternate dataframes for each what-if:
+  - Wind +20%
+  - Storage smoothing (−25% RSD)
+  - Demand +10%
+  - Hybrid (Wind +20% + smoothing)
+- Predicted price responses and computed new KPIs for each.
+""")
 
-# Tabs for the story
-tabA, tabB, tabC, tabD = st.tabs(["🧩 Problem", "🔎 Insights", "⚠️ Gap Identified", "🚀 Call to Action"])
+# --- FINDINGS ---
+st.subheader("4️⃣ Findings & Interpretation")
+st.markdown("""
+**Baseline Week (Oct 18–25, 2025)**  
+- Avg price: ~€{:.1f}/MWh  
+- Stress hours: {:.1f}% of time  
+- Renewable share: {:.1f}% (RSD {:.2f})  
 
-with tabA:
-    st.markdown(problem_txt)
+**Key Insights**
+- Prices spike sharply during low-renewable evenings.
+- Renewable instability (high RSD) drives volatility.
+- Even moderate increases in wind output improve both affordability and reliability.
+""".format(
+    kpi.loc["Baseline","avg_price"],
+    kpi.loc["Baseline","stress_pct"],
+    kpi.loc["Baseline","ren_mean"],
+    kpi.loc["Baseline","rsd"]
+))
 
-with tabB:
-    st.markdown(insights_txt)
-    st.info(
-        "RSD (σ/μ) captures **stability** of renewable share. Lower RSD = steadier renewables, "
-        "which generally reduces price spikes and stress hours."
-    )
+# --- CALL TO ACTION ---
+st.subheader("5️⃣ Call to Action")
+st.markdown("""
+1. **Invest in wind expansion** — even a 20% increase improves stability and lowers price by ~€{:.1f}/MWh.  
+2. **Adopt storage or flexible demand mechanisms** — a 25% RSD reduction smooths volatility and cuts stress hours.  
+3. **Integrate analytics** into daily grid monitoring to pre-empt risk rather than react.  
+4. **Use simulation tools** to test future capacity mixes under varying weather and demand conditions.
+""".format(
+    kpi.loc["Baseline","avg_price"] - kpi.loc["Wind +20%","avg_price"]
+))
 
-with tabC:
-    st.markdown(gap_txt)
-    st.markdown(scenario_txt)
+st.info("The combination of **Wind +20% + Storage Smoothing** delivered the best balance — lowest average price and reduced stress.")
 
-with tabD:
-    st.markdown("**Recommended actions (portfolio approach):**")
-    st.markdown("\n".join([f"- {x}" for x in cta_list]))
-    st.success(
-        "In this dataset, the **Hybrid** approach (more wind + smoothing) delivered the best balance "
-        "across affordability, reliability, and stability."
-    )
+# --- DEMO CTA ---
+st.subheader("6️⃣ Interactive Demo — Simulate Your Scenario")
+st.markdown("""
+You can now use the **sliders in the sidebar** to change:
+- Wind availability
+- Demand increase
+- Renewable stability (via smoothing)
 
-# Executive summary (auto-generated from numbers)
-exec_summary_md = f"""
-# Executive Summary
+The charts and KPIs update instantly, showing how system cost, reliability, and stability respond.
+""")
+st.success("Try adjusting the sliders and watch how your decisions reshape the grid’s balance in real time.")
 
-**Context.** Ireland’s power system must balance affordability (price), reliability (stress hours), and sustainability (renewables).
-Real-world conditions—wind availability, demand, and renewable volatility—drive all three.
-
-**Key Insight (observed week).**
-- Avg price **€{fmt(kb['avg_price'])}/MWh**, P95 **€{fmt(kb['p95_price'])}/MWh**.
-- Stress hours **{fmt(kb['stress_pct'],'%')}** of the time (gen < load).
-- Renewable share avg **{fmt(kb['ren_mean'],'%')}**, stability (RSD) **{fmt(kb['rsd'])}**.
-
-**Gap.** High exposure to volatility → many stressed hours and price sensitivity during low-renewable periods.
-
-**Your Scenario vs Baseline.**
-- Avg price: {updown(delta_price)} **{fmt(abs(delta_price))} €/MWh** ({qualify(delta_price,'down')})
-- P95 price: {updown(delta_p95)} **{fmt(abs(delta_p95))} €/MWh** ({qualify(delta_p95,'down')})
-- Stress hours: {updown(delta_stress)} **{fmt(abs(delta_stress),'%')}** ({qualify(delta_stress,'down')})
-- Renewable stability (RSD): {updown(delta_rsd)} **{fmt(abs(delta_rsd))}** ({qualify(delta_rsd,'down')})
-- Renewable share: {updown(delta_renmean)} **{fmt(abs(delta_renmean),'%')}** ({qualify(delta_renmean,'up')})
-
-**Call to Action.**
-- Increase **wind availability** and **smooth renewable variability** via storage/flex.
-- Prepare for **demand growth** with capacity or flexibility to avoid stress inflation.
-- Use this **simulator** to test portfolio mixes and quantify trade-offs before implementation.
-"""
-
-st.download_button(
-    "⬇️ Download Executive Summary (Markdown)",
-    data=exec_summary_md.encode("utf-8"),
-    file_name="executive_summary_energy_simulator.md",
-    mime="text/markdown",
-)
 
 # -----------------------------
 # Downloads + Footer
