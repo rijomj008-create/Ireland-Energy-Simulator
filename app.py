@@ -102,11 +102,49 @@ with col1:
     fig3.update_layout(title="Renewable Share Over Time", height=400)
     st.plotly_chart(fig3, use_container_width=True)
 with col2:
-    if "wind_speed_mps" in df.columns:
-        fig4 = px.scatter(df, x="wind_speed_mps", y="price_eur_per_mwh", trendline="ols",
-                          labels={"wind_speed_mps":"Wind Speed (m/s)","price_eur_per_mwh":"€/MWh"})
-        fig4.update_layout(title="Price vs Wind Speed", height=400)
-        st.plotly_chart(fig4, use_container_width=True)
+import numpy as np
+import plotly.graph_objects as go
+import plotly.express as px
+
+def add_linear_fit(fig, x, y, name="Linear fit", color="#888", dash="dot"):
+    # simple least-squares with numpy
+    ok = np.isfinite(x) & np.isfinite(y)
+    if ok.sum() >= 2:
+        m, b = np.polyfit(x[ok], y[ok], 1)
+        xx = np.linspace(x[ok].min(), x[ok].max(), 100)
+        yy = m * xx + b
+        fig.add_trace(go.Scatter(
+            x=xx, y=yy, name=name,
+            mode="lines",
+            line=dict(color=color, width=2, dash=dash),
+            hovertemplate=f"{name}<br>x=%{{x:.2f}}<br>y=%{{y:.1f}}<extra></extra>",
+            showlegend=True
+        ))
+
+# --- Wind speed vs Price (fallback fit) ---
+fig4 = px.scatter(
+    df, x="wind_speed_mps", y="price_eur_per_mwh",
+    labels={"wind_speed_mps":"Wind Speed (m/s)","price_eur_per_mwh":"€/MWh"},
+    color_discrete_sequence=["#60A5FA"]
+)
+add_linear_fit(fig4, df["wind_speed_mps"].to_numpy(), df["price_eur_per_mwh"].to_numpy(),
+               name="Linear fit", color="#2563EB")
+fig4.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
+                   plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+st.plotly_chart(fig4, use_container_width=True)
+
+# --- Renewable share vs Price (fallback fit) ---
+fig5 = px.scatter(
+    df, x="renewable_share_pct", y="price_eur_per_mwh",
+    labels={"renewable_share_pct":"Renewable Share (%)","price_eur_per_mwh":"€/MWh"},
+    color_discrete_sequence=["#A78BFA"]
+)
+add_linear_fit(fig5, df["renewable_share_pct"].to_numpy(), df["price_eur_per_mwh"].to_numpy(),
+               name="Linear fit", color="#7C3AED")
+fig5.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
+                   plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+st.plotly_chart(fig5, use_container_width=True)
+
 
 # -----------------------------
 # 3️⃣ INSIGHTS & GAP IDENTIFIED
