@@ -1,7 +1,6 @@
 # ⚡ Ireland Energy Transition — Decision Intelligence Case Study  
 ### From System Volatility → Insight → Strategy → Simulation  
 
-![Banner](https://user-images.githubusercontent.com/your-banner-image.png)
 
 > **Author:** [Rijo Mathew John](https://www.linkedin.com/in/rijomathewjohn)  
 > **Degree:** MSc Data Analytics | Decision Intelligence & Operations Analytics  
@@ -161,22 +160,6 @@ Meteostat Data ─┘               │
 | Deployment      | Streamlit Cloud + GitHub        |
 
 ---
-
-## 🧾 11. Repository Structure
-
-```
-📂 Ireland-Energy-Simulator
-│
-├── app.py                           # Streamlit Case Study + Simulator
-├── data/
-│   └── processed/
-│       └── mart_ie_hourly_system_kpis.csv
-├── requirements.txt
-├── .streamlit/
-│   └── config.toml                  # Dark theme setup
-├── README.md                        # This file
-└── runtime.txt                      # Python version
-```
 
 ---
 
