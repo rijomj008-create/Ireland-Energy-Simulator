@@ -17,10 +17,10 @@ st.title("⚡ Ireland Energy Decision Intelligence Simulator")
 st.caption("Data: ENTSO-E (load, gen, price) + Meteostat (weather) → week of Oct 18–25, 2025")
 
 # Use your exact path from the screenshot
-DATA_PATH = Path("data/processed/mart_ie_hourly_system_kpis.csv")
+DATA_PATH = Path("mart_ie_hourly_system_kpis.csv")
 if not DATA_PATH.exists():
     # fallback if you run from a different cwd
-    DATA_PATH = Path("/content/data/processed/mart_ie_hourly_system_kpis.csv")
+    DATA_PATH = Path("mart_ie_hourly_system_kpis.csv")
 
 df = pd.read_csv(DATA_PATH, parse_dates=["ts_utc"]).sort_values("ts_utc")
 df["ts_utc"] = df["ts_utc"].dt.floor("h")
