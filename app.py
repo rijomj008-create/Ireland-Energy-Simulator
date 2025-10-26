@@ -135,8 +135,7 @@ colx.metric("💶 Average Price", f"€{avg_price:.1f}")
 coly.metric("⚙️ Stress Hours", f"{stress_ratio:.1f}%")
 colz.metric("🌱 Avg Renewable Share", f"{ren_mean:.1f}%")
 
-st.warning("**Problem Statement:**  
-High price sensitivity to renewable volatility is the biggest operational and financial gap.")
+st.warning("**Problem Statement:** High price sensitivity to renewable volatility is the biggest operational and financial gap.")
 
 # -----------------------------
 # 4️⃣ CALL TO ACTION (STRATEGIC)
