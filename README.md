@@ -1,6 +1,7 @@
 # ⚡ Ireland Energy Transition — Decision Intelligence Case Study  
 ### From System Volatility → Insight → Strategy → Simulation  
 
+![Banner](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044644.png)
 
 > **Author:** [Rijo Mathew John](https://www.linkedin.com/in/rijomathewjohn)  
 > **Degree:** MSc Data Analytics | Decision Intelligence & Operations Analytics  
