@@ -102,25 +102,24 @@ with col1:
     fig3.update_layout(title="Renewable Share Over Time", height=400)
     st.plotly_chart(fig3, use_container_width=True)
 with col2:
-import numpy as np
-import plotly.graph_objects as go
-import plotly.express as px
+    # --- Wind speed vs Price (custom linear fit, no statsmodels needed) ---
+    import numpy as np
+    import plotly.graph_objects as go
+    import plotly.express as px
 
-def add_linear_fit(fig, x, y, name="Linear fit", color="#888", dash="dot"):
-    # simple least-squares with numpy
-    ok = np.isfinite(x) & np.isfinite(y)
-    if ok.sum() >= 2:
-        m, b = np.polyfit(x[ok], y[ok], 1)
-        xx = np.linspace(x[ok].min(), x[ok].max(), 100)
-        yy = m * xx + b
-        fig.add_trace(go.Scatter(
-            x=xx, y=yy, name=name,
-            mode="lines",
-            line=dict(color=color, width=2, dash=dash),
-            hovertemplate=f"{name}<br>x=%{{x:.2f}}<br>y=%{{y:.1f}}<extra></extra>",
-            showlegend=True
-        ))
-
+    def add_linear_fit(fig, x, y, name="Linear fit", color="#888", dash="dot"):
+        ok = np.isfinite(x) & np.isfinite(y)
+        if ok.sum() >= 2:
+            m, b = np.polyfit(x[ok], y[ok], 1)
+            xx = np.linspace(x[ok].min(), x[ok].max(), 100)
+            yy = m * xx + b
+            fig.add_trace(go.Scatter(
+                x=xx, y=yy, name=name,
+                mode="lines",
+                line=dict(color=color, width=2, dash=dash),
+                hovertemplate=f"{name}<br>x=%{{x:.2f}}<br>y=%{{y:.1f}}<extra></extra>",
+                showlegend=True
+            ))
 # --- Wind speed vs Price (fallback fit) ---
 fig4 = px.scatter(
     df, x="wind_speed_mps", y="price_eur_per_mwh",
