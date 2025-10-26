@@ -52,18 +52,31 @@ if df.empty or "price_eur_per_mwh" not in df.columns:
     st.stop()
 
 # -----------------------------
-# Global sidebar filters (date range)
+# Global sidebar filters (date range) — TZ-robust
 # -----------------------------
 min_d, max_d = df["ts_utc"].min(), df["ts_utc"].max()
 default_range = [min_d.date(), max_d.date()]
+
 chosen = st.sidebar.date_input("Filter date range", default_range)
-if isinstance(chosen, list) and len(chosen) == 2:
+
+# Normalize selection to (start_date, end_date)
+if isinstance(chosen, (list, tuple)) and len(chosen) == 2:
     start_d, end_d = chosen
 else:
     start_d, end_d = default_range
 
-df = df[(df["ts_utc"] >= pd.Timestamp(start_d)) &
-        (df["ts_utc"] <= pd.Timestamp(end_d) + pd.Timedelta(days=1))]
+# Build tz-compatible boundaries
+col_tz = getattr(df["ts_utc"].dt, "tz", None)  # None if naive, tzinfo if aware
+if col_tz is None:
+    # ts_utc is naive
+    start_ts = pd.Timestamp(start_d)
+    end_ts   = pd.Timestamp(end_d) + pd.Timedelta(days=1)
+else:
+    # ts_utc is tz-aware (e.g., UTC)
+    start_ts = pd.Timestamp(start_d).tz_localize(col_tz)
+    end_ts   = (pd.Timestamp(end_d) + pd.Timedelta(days=1)).tz_localize(col_tz)
+
+df = df[(df["ts_utc"] >= start_ts) & (df["ts_utc"] < end_ts)]
 if df.empty:
     st.warning("No data for the selected date range.")
     st.stop()
