@@ -298,7 +298,13 @@ smooth_change = st.sidebar.slider("Renewable Stability (−RSD %)", 0, 40, 0)
 sim = df.copy()
 sim["ren_share_sim"] = sim["renewable_share_pct"] * (1 + wind_change/100)
 sim["load_sim"] = sim["load_mw"] * (1 + demand_change/100)
-sim["price_sim"] = predict_price(model, sim)
+sim["price_sim"] = predict_price(
+    model, sim, load_mean, load_std,
+    ren_col="ren_share_sim",   # <- your simulated renewable share column
+    load_col="load_sim",       # <- your simulated load column
+    gen_col="total_gen_sim"    # <- your simulated generation column
+)
+
 
 # -------- KPI COMPARISON --------
 def get_kpi(dframe):
