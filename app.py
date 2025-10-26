@@ -1,6 +1,5 @@
-# app.py  — Ireland Energy Decision Intelligence Simulator
+# app.py — Ireland Energy Decision Intelligence Simulator (polished)
 
-# ===== Imports =====
 import os
 from pathlib import Path
 import numpy as np
@@ -12,60 +11,78 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Ridge
 
-# ===== Page config =====
+# -----------------------------
+# Page config
+# -----------------------------
 st.set_page_config(page_title="Ireland Energy Decision Simulator", layout="wide")
 st.title("⚡ Ireland Energy Decision Intelligence Simulator")
 st.caption("Data: ENTSO-E (load, generation, price) + Meteostat (weather) — Oct 18–25, 2025")
 
-# ===== Data loader (robust) =====
+# -----------------------------
+# Data loader (robust + cached)
+# -----------------------------
 @st.cache_data(show_spinner=True, ttl=3600)
 def load_mart():
-    # Try repo-friendly path first
-    p1 = Path(__file__).parent / "data" / "processed" / "mart_ie_hourly_system_kpis.csv"
-    p2 = Path(__file__).parent / "mart_ie_hourly_system_kpis.csv"  # fallback if file is at repo root
-
+    here = Path(__file__).parent
+    p1 = here / "data" / "processed" / "mart_ie_hourly_system_kpis.csv"
+    p2 = here / "mart_ie_hourly_system_kpis.csv"
     if p1.exists():
         df = pd.read_csv(p1, parse_dates=["ts_utc"])
     elif p2.exists():
         df = pd.read_csv(p2, parse_dates=["ts_utc"])
     else:
-        # Final fallback: a URL in secrets/env (e.g., raw GitHub or S3)
         url = os.getenv("MART_CSV_URL", "") or st.secrets.get("MART_CSV_URL", "")
         if not url:
             raise FileNotFoundError(
-                "Could not find mart_ie_hourly_system_kpis.csv. "
-                "Place it under data/processed/ or repo root, or set MART_CSV_URL in Secrets."
+                "CSV not found. Put it at data/processed/mart_ie_hourly_system_kpis.csv "
+                "or mart_ie_hourly_system_kpis.csv (repo root), or set MART_CSV_URL in Secrets."
             )
         df = pd.read_csv(url, parse_dates=["ts_utc"])
-
     df = df.sort_values("ts_utc").copy()
     df["ts_utc"] = df["ts_utc"].dt.floor("h")
-    # Drop any duplicate-named columns that can break selection
     df = df.loc[:, ~df.columns.duplicated()].copy()
+    # add ren_mw if missing
+    if "ren_mw" not in df.columns and {"total_generation_mw","renewable_share_pct"}.issubset(df.columns):
+        df["ren_mw"] = (df["total_generation_mw"] * df["renewable_share_pct"] / 100.0).fillna(0.0)
     return df
 
 df = load_mart()
+if df.empty or "price_eur_per_mwh" not in df.columns:
+    st.error("Dataset empty or missing price_eur_per_mwh. Check the CSV.")
+    st.stop()
 
-# Compute renewable MW if not present
-if "ren_mw" not in df.columns:
-    if {"total_generation_mw", "renewable_share_pct"}.issubset(df.columns):
-        df["ren_mw"] = (df["total_generation_mw"] * df["renewable_share_pct"] / 100.0).fillna(0.0)
-    else:
-        df["ren_mw"] = 0.0
+# -----------------------------
+# Global sidebar filters (date range)
+# -----------------------------
+min_d, max_d = df["ts_utc"].min(), df["ts_utc"].max()
+default_range = [min_d.date(), max_d.date()]
+chosen = st.sidebar.date_input("Filter date range", default_range)
+if isinstance(chosen, list) and len(chosen) == 2:
+    start_d, end_d = chosen
+else:
+    start_d, end_d = default_range
 
-# ===== Helpers =====
+df = df[(df["ts_utc"] >= pd.Timestamp(start_d)) &
+        (df["ts_utc"] <= pd.Timestamp(end_d) + pd.Timedelta(days=1))]
+if df.empty:
+    st.warning("No data for the selected date range.")
+    st.stop()
+
+# -----------------------------
+# Helpers
+# -----------------------------
 def kpis(dframe, price_col, ren_col, load_col="load_mw", gen_col="total_generation_mw"):
     ratio = dframe[gen_col] / dframe[load_col]
     stress = (ratio < 1).astype(int)
-    ren = dframe[ren_col]
-    ren_mean = ren.mean()
-    rsd = ren.std() / (ren_mean if ren_mean else np.nan)
+    ren = pd.to_numeric(dframe[ren_col], errors="coerce")
+    mean_ren = ren.mean()
+    rsd = ren.std() / (mean_ren if mean_ren else np.nan)
     return {
         "avg_price": dframe[price_col].mean(),
         "p95_price": dframe[price_col].quantile(0.95),
         "stress_pct": 100 * stress.mean(),
         "rsd": rsd,
-        "ren_mean": ren_mean
+        "ren_mean": mean_ren
     }
 
 def build_features(dfx, load_mean, load_std, ren_col, load_col, gen_col):
@@ -85,30 +102,55 @@ def build_features(dfx, load_mean, load_std, ren_col, load_col, gen_col):
         X[c] = X[c].fillna(X[c].mean())
     return X
 
-def fit_ridge(dfb, ren_col="renewable_share_pct", load_col="load_mw", gen_col="total_generation_mw", alpha=5.0):
+def _fit_ridge(dfb, ren_col="renewable_share_pct", load_col="load_mw", gen_col="total_generation_mw", alpha=5.0):
     load_mean, load_std = dfb[load_col].mean(), dfb[load_col].std()
     X = build_features(dfb, load_mean, load_std, ren_col, load_col, gen_col)
     y = dfb["price_eur_per_mwh"].values
     model = make_pipeline(StandardScaler(), Ridge(alpha=alpha, fit_intercept=True))
     model.fit(X, y)
-    return model, load_mean, load_std, list(X.columns)
+    resid = y - model.predict(X)
+    resid_std = float(np.std(resid)) if len(resid) else 0.0
+    return model, load_mean, load_std, list(X.columns), resid_std
+
+@st.cache_resource
+def fit_cached(dfb):
+    return _fit_ridge(dfb)
 
 def predict_price(model, dfx, load_mean, load_std, ren_col="renewable_share_pct",
                   load_col="load_mw", gen_col="total_generation_mw"):
     X = build_features(dfx, load_mean, load_std, ren_col, load_col, gen_col)
     return model.predict(X)
 
-# ===== Baseline model =====
+# -----------------------------
+# Fit baseline model (cached)
+# -----------------------------
 WIND_FRACTION_IN_REN = 0.80
-model, load_mean, load_std, feat_names = fit_ridge(df)
+model, load_mean, load_std, feat_names, resid_std = fit_cached(df)
 
-# ===== Sidebar controls =====
+# -----------------------------
+# Sidebar: custom scenario controls (with URL persistence)
+# -----------------------------
+qs = st.query_params
+wind_init   = int(qs.get("wind", 0))
+demand_init = int(qs.get("demand", 0))
+smooth_init = int(qs.get("smooth", 0))
+
 st.sidebar.header("Custom Scenario Controls")
-wind_pct   = st.sidebar.slider("Wind availability change (%)", -10, 30, 0)
-demand_pct = st.sidebar.slider("Demand change (%)", -10, 20, 0)
-smooth_pct = st.sidebar.slider("Storage smoothing (reduce RSD by %) ", 0, 40, 0)
+wind_pct   = st.sidebar.slider("Wind availability change (%)", -10, 30, wind_init)
+demand_pct = st.sidebar.slider("Demand change (%)", -10, 20, demand_init)
+smooth_pct = st.sidebar.slider("Storage smoothing (reduce RSD by %) ", 0, 40, smooth_init)
 
-# ===== Scenarios =====
+col_reset, _ = st.sidebar.columns([1,2])
+if col_reset.button("Reset sliders"):
+    st.query_params.clear()
+    st.rerun()
+
+# write params back to URL
+st.query_params.update({"wind": wind_pct, "demand": demand_pct, "smooth": smooth_pct})
+
+# -----------------------------
+# Scenarios
+# -----------------------------
 def scenario_baseline(dfx):
     out = dfx.copy()
     out["ren_share_sim"]  = out["renewable_share_pct"]
@@ -179,10 +221,9 @@ scen = {
     "Demand +10%": scenario_demand_up(df, 10),
     "Hybrid: Wind +20% & smoothing": scenario_hybrid(df, 20, 25),
 }
-# Custom from sliders
 scen["Your custom"] = scenario_hybrid(scenario_demand_up(df, demand_pct), wind_pct, smooth_pct)
 
-# ===== KPI table =====
+# KPI table
 rows = []
 for name, d in scen.items():
     m = kpis(
@@ -194,9 +235,8 @@ for name, d in scen.items():
     )
     m["scenario"] = name
     rows.append(m)
-
 kpi = pd.DataFrame(rows).set_index("scenario").loc[
-    ["Baseline", "Wind +20%", "Storage smoothing (−25% RSD)", "Demand +10%", "Hybrid: Wind +20% & smoothing", "Your custom"]
+    ["Baseline","Wind +20%","Storage smoothing (−25% RSD)","Demand +10%","Hybrid: Wind +20% & smoothing","Your custom"]
 ]
 
 st.subheader("Scenario KPIs")
@@ -207,8 +247,11 @@ st.dataframe(
     }),
     use_container_width=True
 )
+st.caption("**RSD** = variability of renewable share (σ/μ). Lower is steadier supply. **Stress** = hours when generation < load.")
 
-# ===== Price trajectory (Plotly) =====
+# -----------------------------
+# Price trajectory (Plotly + confidence band)
+# -----------------------------
 st.subheader("Price trajectory (Baseline vs Your custom)")
 smooth_on = st.checkbox("Show 3-hour smoothing", value=True)
 
@@ -218,12 +261,25 @@ line_wide = base.merge(cust, on="ts_utc", how="inner").sort_values("ts_utc")
 
 fig = go.Figure()
 color_map = {"Baseline":"#3B82F6", "Your custom":"#F59E0B"}
+
+# main lines
 for col in ["Baseline", "Your custom"]:
     fig.add_trace(go.Scatter(
         x=line_wide["ts_utc"], y=line_wide[col],
         mode="lines", name=col, line=dict(width=3, color=color_map[col]),
         hovertemplate=f"{col}<br>%{{x|%Y-%m-%d %H:%M}}<br>€%{{y:.1f}}/MWh<extra></extra>",
     ))
+
+# confidence band for custom (using training residual std as proxy)
+yhat = line_wide["Your custom"].to_numpy()
+if resid_std and resid_std > 0:
+    upper = yhat + 1.96 * resid_std
+    lower = yhat - 1.96 * resid_std
+    fig.add_trace(go.Scatter(x=line_wide["ts_utc"], y=upper, line=dict(width=0), showlegend=False, hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=line_wide["ts_utc"], y=lower, line=dict(width=0), fill="tonexty",
+                             fillcolor="rgba(245,158,11,0.12)", showlegend=False, hoverinfo="skip"))
+
+# smoothing overlay
 if smooth_on:
     for col in ["Baseline", "Your custom"]:
         fig.add_trace(go.Scatter(
@@ -231,6 +287,7 @@ if smooth_on:
             mode="lines", name=f"{col} (3h MA)",
             line=dict(width=2, dash="dot", color=color_map[col]), showlegend=False
         ))
+
 fig.update_layout(
     height=420, margin=dict(l=10, r=10, t=10, b=10),
     plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
@@ -241,7 +298,9 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# ===== Bar comparison (polished) =====
+# -----------------------------
+# Bar comparison (cleaned x-axis)
+# -----------------------------
 st.subheader("Bar comparison")
 SCEN_ORDER = [
     "Baseline",
@@ -263,7 +322,7 @@ def bar_metric(df_in, col, title, yfmt="raw", decimals=1):
     figb.update_traces(marker_color=colors, textposition="outside", cliponaxis=False)
     figb.update_layout(
         title=title, xaxis_title=None,
-        yaxis_title=({"euro": "€ / MWh", "pct": "%"}).get(yfmt, col),
+        yaxis_title=({"euro":"€ / MWh","pct":"%"}).get(yfmt, col),
         bargap=0.35, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=10, r=10, t=60, b=10), font=dict(size=13), showlegend=False,
     )
@@ -288,7 +347,9 @@ with c3:
     st.plotly_chart(bar_metric(kpi_plot, "rsd", "Renewable Stability (RSD)", yfmt="raw", decimals=2), use_container_width=True)
 st.caption("Tip: Green bar = your custom scenario. Hover to see scenario names.")
 
-# ===== Monitoring Dashboards (Streamlit versions of Power BI pages) =====
+# -----------------------------
+# Monitoring Dashboards (Power BI pages → Streamlit tabs)
+# -----------------------------
 st.markdown("---")
 st.header("📊 Monitoring Dashboards")
 
@@ -307,8 +368,8 @@ def kpi_cards_block(dfk, price_col="price_eur_per_mwh", ren_col="renewable_share
     colC.metric("🌱 Avg Renewable Share", f"{dfk[ren_col].mean():.1f}%")
     colD.metric("⚙️ Stress Hours", f"{stress_pct:.1f}%")
 
-def tidy_hour_date(dfh):
-    d = dfh.copy()
+def add_date_parts(dfin):
+    d = dfin.copy()
     d["date"] = d["ts_utc"].dt.date
     d["hour"] = d["ts_utc"].dt.hour
     return d
@@ -356,9 +417,9 @@ with tab1:
                             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_r, use_container_width=True)
 
-    # Stress heatmap
+    # Stress heatmap (hour × date)
     st.markdown("**Stress Heatmap (Hour × Date)**")
-    d2 = tidy_hour_date(df)
+    d2 = add_date_parts(df)
     d2["stress"] = ((d2["total_generation_mw"] / d2["load_mw"]) < 1).astype(int)
     heat = (d2.pivot_table(index="hour", columns="date", values="stress", aggfunc="mean")
               .sort_index(ascending=True))
@@ -381,7 +442,6 @@ with tab2:
                                xaxis_title="€/MWh", yaxis_title="Count",
                                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_hist, use_container_width=True)
-
     with colB:
         d3 = df.copy()
         d3["stress_flag"] = np.where((d3["total_generation_mw"]/d3["load_mw"])<1, "Stress", "Non-stress")
@@ -402,7 +462,6 @@ with tab2:
         fig_sc.update_layout(margin=dict(l=10,r=10,t=10,b=10),
                              plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_sc, use_container_width=True)
-
     with colD:
         d4 = df.copy()
         d4["hour"] = d4["ts_utc"].dt.hour
@@ -425,7 +484,6 @@ with tab2:
 
 with tab3:
     st.subheader("Renewable Stability & Weather")
-
     r = rsd_val(df["renewable_share_pct"])
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("RSD (σ/μ) of Ren. Share", f"{r:.2f}" if pd.notna(r) else "—")
@@ -460,6 +518,8 @@ with tab3:
 
     st.markdown("**Wind Efficiency (Renewable MW per m/s)**")
     if "wind_speed_mps" in df.columns:
+        if "ren_mw" not in df.columns:
+            df["ren_mw"] = (df["total_generation_mw"] * df["renewable_share_pct"] / 100.0).fillna(0.0)
         eff = df[["ts_utc","ren_mw","wind_speed_mps"]].copy()
         eff["eff_mw_per_ms"] = eff["ren_mw"] / eff["wind_speed_mps"].replace(0, np.nan)
         fig_eff = px.line(eff, x="ts_utc", y="eff_mw_per_ms", height=320,
@@ -471,7 +531,9 @@ with tab3:
     else:
         st.info("Wind speed not available to compute efficiency.")
 
-# ===== Optional: downloads =====
+# -----------------------------
+# Downloads + Footer
+# -----------------------------
 st.markdown("### ⬇️ Downloads")
 st.download_button(
     "Download scenario KPIs (CSV)",
@@ -479,4 +541,16 @@ st.download_button(
     file_name="scenario_kpis.csv",
     mime="text/csv",
 )
+traj = scen["Your custom"][["ts_utc","price_sim"]].rename(columns={"price_sim":"price_custom"})
+traj = traj.merge(scen["Baseline"][["ts_utc","price_sim"]].rename(columns={"price_sim":"price_baseline"}), on="ts_utc")
+st.download_button(
+    "Download prices (CSV)",
+    data=traj.to_csv(index=False).encode("utf-8"),
+    file_name="prices_baseline_vs_custom.csv",
+    mime="text/csv",
+)
 
+st.markdown("---")
+st.markdown("Built by **Rijo Mathew John** — "
+            "[GitHub](https://github.com/rijomj008-create) • "
+            "[Streamlit app](https://ireland-energy-simulator-jvaxfcjmqitlxxdap5reapp.streamlit.app/)")
