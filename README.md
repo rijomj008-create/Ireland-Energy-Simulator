@@ -97,7 +97,40 @@ The grid is *too reactive* — a small renewable dip triggers large market swing
 | **Hybrid Strategy** | Combines cost reduction + resilience gain |
 
 ---
+---
 
+## 📊 6. Monitoring Dashboards — System Intelligence View
+
+The dashboards below form the analytical layer that feeds into the **Decision Intelligence Simulator**.  
+They summarize how Ireland’s energy system performs across **affordability**, **reliability**, and **renewable stability**.
+
+### 🔹 System Overview  
+Load vs Generation, Price evolution, and Renewable share dynamics.
+![System Overview](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044644.png)
+
+---
+
+### 🔹 Affordability & Reliability  
+Visualizing stress vs non-stress pricing behavior and demand sensitivity.
+![Affordability and Reliability](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044720.png)
+
+---
+
+### 🔹 Renewable Stability & Weather  
+How wind efficiency and sunshine patterns influence renewable variability.
+![Renewable Stability and Weather](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044736.png)
+
+---
+
+### 🔹 Decision Simulator Preview  
+Live Ridge Regression–based scenario simulator connecting data → prediction → insight.
+![Decision Simulator](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044750.png)
+
+---
+
+
+
+---
 ## 🧠 7. Decision Intelligence Simulator
 
 > 🎯 Try it yourself: [**Launch Interactive App →**](https://ireland-energy-simulator-v5fozxllkk9lnjxamurzzw.streamlit.app/?wind=0&demand=0&smooth=0)
