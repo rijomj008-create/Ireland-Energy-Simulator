@@ -106,25 +106,25 @@ They summarize how Ireland’s energy system performs across **affordability**, 
 
 ### 🔹 System Overview  
 Load vs Generation, Price evolution, and Renewable share dynamics.
-![System Overview](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044644.png)
+![System Overview](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044720.png)
 
 ---
 
 ### 🔹 Affordability & Reliability  
 Visualizing stress vs non-stress pricing behavior and demand sensitivity.
-![Affordability and Reliability](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044720.png)
+![Affordability and Reliability](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044736.png)
 
 ---
 
 ### 🔹 Renewable Stability & Weather  
 How wind efficiency and sunshine patterns influence renewable variability.
-![Renewable Stability and Weather](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044736.png)
+![Renewable Stability and Weather](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044750.png)
 
 ---
 
 ### 🔹 Decision Simulator Preview  
 Live Ridge Regression–based scenario simulator connecting data → prediction → insight.
-![Decision Simulator](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044750.png)
+![Decision Simulator](https://github.com/rijomj008-create/Ireland-Energy-Simulator/blob/main/Screenshot%202025-10-26%20044644.png)
 
 ---
 
