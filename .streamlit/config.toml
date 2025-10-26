@@ -1,3 +1,4 @@
+# .streamlit/config.toml
 [server]
 headless = true
 enableCORS = false
@@ -5,7 +6,8 @@ port = 8501
 
 [theme]
 base = "dark"
-primaryColor = "#4F46E5"
-backgroundColor = "#0E1117"
-secondaryBackgroundColor = "#1A1F2E"
-textColor = "#FFFFFF"
+primaryColor = "#7C3AED"            # fresh violet
+backgroundColor = "#0B1020"         # deep navy
+secondaryBackgroundColor = "#121834" # card background
+textColor = "#E6E8EE"               # soft white
+font = "sans serif"
